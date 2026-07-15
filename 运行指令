@@ -1,0 +1,39 @@
+windows训练指令：
+cd mmdetection
+$env:PYTHONPATH = "D:\pycharm work\Swin-Deformable;" + $env:PYTHONPATH
+python tools/train.py my_running/configs/swin_deformable_224.py
+python tools/train.py my_running/configs/Swin-DINO.py
+
+测试指令生成prediction.json：
+python tools/test.py my_running/configs/swin_deformable_224.py "E:\pycharm\project\Swin-Deformable\mmdetection\work_dirs\deformable-detr_r50_16xb2-50e_coco\epoch_100.pth"
+
+Linux 训练指令：
+常见报错原因：No module named ‘mmcv._ext‘
+Linux系统中安装mmcv==2.1.0版本需要保证cuda可用，并且与windows不同的是官方没有提供预编译文件，需要手动编译，主要过程如下：
+1.下载官方的mmcv==2.1.0的源代码 git clone https://github.com/open-mmlab/mmcv.git -b v2.1.0
+2.进入mmcv cd mmcv
+3.编译：MMCV_WITH_OPS=1 FORCE_CUDA=1 python setup.py build_ext --inplace
+编译成功之后应该有一个.so文件 -> copying build/lib.linux-x86_64-cpython-39/mmcv/_ext.cpython-39-x86_64-linux-gnu.so -> mmcv
+验证指令如下：
+python - << 'EOF'
+import mmcv
+print("mmcv version:", mmcv.__version__)
+import mmcv._ext
+print("mmcv._ext loaded successfully!")
+EOF
+如有其他问题请问AI解决
+
+conda activate SwinTransformer
+cd autodl-tmp/
+cd Swin-Deformable
+cd mmdetection/
+export PYTHONPATH="/root/autodl-tmp/Swin-Deformable:$PYTHONPATH"
+
+
+python tools/train.py my_running/configs/swin_deformable_224.py
+
+python tools/test.py my_running/configs/Swin-DINO.py
+
+python tools/test.py my_running/configs/Swin-DINO.py "/root/autodl-tmp/Swin-Deformable-output/ffusion/epoch_51.pth"
+
+echo $PYTHONPATH

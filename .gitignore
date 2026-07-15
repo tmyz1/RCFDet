@@ -1,0 +1,7 @@
+.venv/
+.venv1/
+.idea/
+.agents/
+__pycache__/
+*.pyc
+work_dirs/
