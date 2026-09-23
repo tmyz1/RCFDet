@@ -118,6 +118,20 @@ def main():
         # if 'runner_type' is set in the cfg
         runner = RUNNERS.build(cfg)
 
+    # # start training
+    # runner.train()
+    # ================= 新增：自动统计参数量 =================
+    # 兼容多卡训练（DDP 包裹）
+    model = runner.model.module if hasattr(runner.model, 'module') else runner.model
+    total_params = sum(p.numel() for p in model.parameters())
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print(f"\n{'=' * 40}")
+    print(f"📊 模型参数量统计:")
+    print(f"   总参数量: {total_params / 1e6:.2f} M")
+    print(f"   可训练参数量: {trainable_params / 1e6:.2f} M")
+    print(f"{'=' * 40}\n")
+    # ======================================================
+
     # start training
     runner.train()
 

@@ -13,6 +13,77 @@ from mmdet.engine.hooks.utils import trigger_visualization_hook
 from mmdet.evaluation import DumpDetResults
 from mmdet.registry import RUNNERS
 from mmdet.utils import setup_cache_size_limit_of_dynamo
+import time
+import torch
+from mmengine.hooks import Hook
+from mmengine.registry import HOOKS
+
+
+@HOOKS.register_module()
+class FPSCalculateHook(Hook):
+    """端到端推理速度统计 Hook（兼容 Windows + MMDet 3.x）"""
+    priority = 'VERY_LOW'
+
+    def before_run(self, runner) -> None:
+        self.start_time = time.time()
+        self.total_samples = 0
+        self.batch_count = 0
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
+        runner.logger.info("[FPS Hook] Start timing...")
+
+    def after_iter(self, runner) -> None:
+        # MMDet 3.x: runner.data_batch 是 dict，包含 'inputs' 和 'data_samples'
+        batch = getattr(runner, 'data_batch', None)
+        if batch is None:
+            return
+
+        # 方法1: 从 data_samples 获取（推荐）
+        data_samples = batch.get('data_samples', [])
+        if isinstance(data_samples, (list, tuple)):
+            batch_size = len(data_samples)
+        else:
+            # 方法2: 从 inputs 获取（备选）
+            inputs = batch.get('inputs', None)
+            if inputs is not None:
+                batch_size = inputs.shape[0] if hasattr(inputs, 'shape') else 1
+            else:
+                batch_size = 1  # 保底
+
+        self.total_samples += batch_size
+        self.batch_count += 1
+
+        # 每 50 个 batch 打印一次进度（可选）
+        if self.batch_count % 50 == 0:
+            elapsed = time.time() - self.start_time
+            cur_fps = self.total_samples / elapsed if elapsed > 0 else 0
+            runner.logger.info(f"[FPS] Processed {self.total_samples} imgs, {cur_fps:.2f} fps...")
+
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
+
+    def after_run(self, runner) -> None:
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
+
+        elapsed = time.time() - self.start_time
+
+        # 避免除零
+        if self.total_samples > 0 and elapsed > 0:
+            fps = self.total_samples / elapsed
+            latency = (elapsed / self.total_samples) * 1000
+        else:
+            fps = 0
+            latency = 0
+
+        # 使用 ASCII 字符，避免 Windows GBK 编码错误
+        runner.logger.info("\n" + "=" * 60)
+        runner.logger.info(" [FPS Statistics] End-to-end inference speed")
+        runner.logger.info(f"   Total images  : {self.total_samples}")
+        runner.logger.info(f"   Total time    : {elapsed:.2f} seconds")
+        runner.logger.info(f"   Avg latency   : {latency:.2f} ms/img")
+        runner.logger.info(f"   >> FPS        : {fps:.2f} img/s")
+        runner.logger.info("=" * 60 + "\n")
 
 
 # TODO: support fuse_conv_bn and format_only
@@ -125,6 +196,7 @@ def main():
         cfg.model = ConfigDict(**cfg.tta_model, module=cfg.model)
         cfg.test_dataloader.dataset.pipeline = cfg.tta_pipeline
 
+
     # build the runner from config
     if 'runner_type' not in cfg:
         # build the default runner
@@ -141,8 +213,47 @@ def main():
         runner.test_evaluator.metrics.append(
             DumpDetResults(out_file_path=args.out))
 
+    # ================= 新增：端到端推理计时 =================
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
+    start_time = time.time()
+    runner.logger.info("[FPS] Start end-to-end inference timing...")
+    # ========================================================
     # start testing
     runner.test()
+
+    # ================= 新增：计算并打印 FPS =================
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
+    end_time = time.time()
+    elapsed = end_time - start_time
+
+    # 从测试集配置中获取图片总数（避免依赖 batch 统计）
+    test_dataset = cfg.test_dataloader.dataset
+    if hasattr(test_dataset, 'ann_file') and osp.exists(test_dataset.ann_file):
+        import json
+        with open(test_dataset.ann_file, 'r') as f:
+            ann_data = json.load(f)
+        total_images = len(ann_data.get('images', []))
+    else:
+        # 兜底：用 dataloader 长度估算
+        total_images = len(runner.test_dataloader) * cfg.test_dataloader.get('batch_size', 1)
+
+    if total_images > 0 and elapsed > 0:
+        fps = total_images / elapsed
+        latency = (elapsed / total_images) * 1000
+    else:
+        fps = 0
+        latency = 0
+
+    runner.logger.info("\n" + "=" * 60)
+    runner.logger.info(" [FPS Statistics] End-to-end inference speed")
+    runner.logger.info(f"   Total images  : {total_images}")
+    runner.logger.info(f"   Total time    : {elapsed:.2f} seconds")
+    runner.logger.info(f"   Avg latency   : {latency:.2f} ms/img")
+    runner.logger.info(f"   >> FPS        : {fps:.2f} img/s")
+    runner.logger.info("=" * 60 + "\n")
+    # ========================================================
 
 
 if __name__ == '__main__':

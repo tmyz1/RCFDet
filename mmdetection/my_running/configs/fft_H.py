@@ -83,8 +83,8 @@ def get_score(img, number, block):
 
 
 # 读取图像(00788,00865,01298,02542,02683,03862,00325)
-rgb = cv2.imread(r"E:\my_data\M3FD\cocodataset\images\visible\00000.png")
-ir = cv2.imread(r"E:\my_data\M3FD\cocodataset\images\infrared\00000.png")
+rgb = cv2.imread(r"E:\my_data\M3FD\cocodataset\images\visible\01298.png")
+ir = cv2.imread(r"E:\my_data\M3FD\cocodataset\images\infrared\01298.png")
 # 转灰度
 rgb_gray = cv2.cvtColor(rgb, cv2.COLOR_BGR2GRAY)
 ir_gray = cv2.cvtColor(ir, cv2.COLOR_BGR2GRAY)
@@ -92,7 +92,7 @@ ir_gray = cv2.cvtColor(ir, cv2.COLOR_BGR2GRAY)
 # 调用高通函数
 rgb_fft = fft_H(rgb_gray)
 ir_fft = fft_H(ir_gray)
-block = 10
+block = 1
 add,count = region_select_fft(rgb_fft, ir_fft, block)
 final= get_score(rgb_fft, count, block)
 add3 = cv2.cvtColor(add, cv2.COLOR_GRAY2BGR)

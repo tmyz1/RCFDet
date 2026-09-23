@@ -91,7 +91,10 @@ def inference(args, logger):
             break
         data = model.data_preprocessor(data_batch)
         result['ori_shape'] = data['data_samples'][0].ori_shape
-        result['pad_shape'] = data['data_samples'][0].pad_shape
+        #result['pad_shape'] = data['data_samples'][0].pad_shape
+        # 修改后
+        data_sample = data['data_samples'][0]
+        result['pad_shape'] = data_sample.metainfo.get('pad_shape', data_sample.img_shape)
         if hasattr(data['data_samples'][0], 'batch_input_shape'):
             result['pad_shape'] = data['data_samples'][0].batch_input_shape
         model.forward = partial(_forward, data_samples=data['data_samples'])

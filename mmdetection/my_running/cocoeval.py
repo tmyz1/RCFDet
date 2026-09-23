@@ -1,7 +1,7 @@
 from pycocotools.coco import COCO
 from pycocotools.cocoeval import COCOeval
 import sys
-save_path = r"E:\pycharm\project\Swin-DINO rar\all\0.862.txt"
+save_path = r"E:\pycharm\project\Swin-DINO rar\all\0.872.txt"
 class Logger(object):
     def __init__(self, filename):
         self.terminal = sys.stdout
@@ -20,7 +20,7 @@ sys.stdout = Logger(save_path)
 cocoGt = COCO(r"E:\my_data\M3FD\cocodataset\annotations\test.json")
 print(cocoGt)
 cocoDt = cocoGt.loadRes(
-    r"E:\pycharm\project\Swin-DINO rar\all\test.bbox (1).json")
+    r"E:\pycharm\project\work_dirs\model\4\19.bbox.json")
 
 cocoEval = COCOeval(cocoGt, cocoDt, iouType="bbox")
 cocoEval.evaluate()

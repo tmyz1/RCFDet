@@ -78,8 +78,8 @@ class CrossResidualFusion(nn.Module):
         self.pretrained = pretrained
         self.rgb_swin, self.ir_swin = self.build_SwinTransformer()
         self.with_img_mask = with_img_mask
-        load_swin_to_submodule(self.rgb_swin, r'/root/autodl-tmp/Swin-Deformable/mmdetection/weight/swin_big_224.pth')
-        #load_swin_to_submodule(self.rgb_swin, r"E:\reproduce\weights\SwinTransformer\swin_big_224.pth")
+        #load_swin_to_submodule(self.rgb_swin, r'/root/autodl-tmp/Swin-Deformable/mmdetection/weight/swin_big_224.pth')
+        load_swin_to_submodule(self.rgb_swin, r"E:\reproduce\weights\SwinTransformer\swin_big_224.pth")
         self.ir_swin.load_state_dict(self.rgb_swin.state_dict(), strict=False)  # 复制给另一个分支
 
         self.downsample = ModuleList()#下采样模块
