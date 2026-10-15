@@ -1,6 +1,6 @@
 windows训练指令：
 cd mmdetection
-$env:PYTHONPATH = "E:\pycharm\project\Swin-Deformable RGB;" + $env:PYTHONPATH
+$env:PYTHONPATH = "D:\pycharm work\Swin-Deformable;" + $env:PYTHONPATH
 python tools/train.py my_running/configs/swin_deformable_224.py
 python tools/train.py my_running/configs/Swin-DINO.py
 
@@ -28,9 +28,23 @@ cd autodl-tmp/
 cd Swin-Deformable
 cd mmdetection/
 export PYTHONPATH="/root/autodl-tmp/Swin-Deformable:$PYTHONPATH"
-python tools/train.py my_running/configs/Swin-DINO.py
+
+
 python tools/train.py my_running/configs/swin_deformable_224.py
 
 python tools/test.py my_running/configs/Swin-DINO.py
 
+python tools/test.py my_running/configs/Swin-DINO.py "/root/autodl-tmp/Swin-Deformable-output/ffusion/epoch_51.pth"
+
 echo $PYTHONPATH
+
+
+cd /root/autodl-tmp/Swin-Deformable/mmdetection/my_running/fuse_image_with_pixiv
+
+python get_fused_image.py /root/autodl-tmp/M3FD/cocodataset/images \
+  --output-dir /root/autodl-tmp/M3FD_ffusion/bench_w1 \
+  --workers 1
+
+python get_fused_image.py /root/autodl-tmp/M3FD/cocodataset/images \
+  --output-dir /root/autodl-tmp/M3FD_ffusion/bench_w4 \
+  --workers 4

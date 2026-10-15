@@ -1,7 +1,7 @@
 from pycocotools.coco import COCO
 from pycocotools.cocoeval import COCOeval
 import sys
-save_path = r"E:\pycharm\project\Swin-DINO rar\all\0.872.txt"
+#save_path = r"E:\pycharm\project\Swin-DINO rar\all\0.872.txt"
 class Logger(object):
     def __init__(self, filename):
         self.terminal = sys.stdout
@@ -15,12 +15,12 @@ class Logger(object):
         pass
 
 
-sys.stdout = Logger(save_path)
+#sys.stdout = Logger(save_path)
 
-cocoGt = COCO(r"E:\my_data\M3FD\cocodataset\annotations\test.json")
+cocoGt = COCO(r"D:\data\M3FD\cocodataset\annotations\test.json")
 print(cocoGt)
 cocoDt = cocoGt.loadRes(
-    r"E:\pycharm\project\work_dirs\model\4\19.bbox.json")
+    r"D:\pycharm work\weight\test.bbox.json")
 
 cocoEval = COCOeval(cocoGt, cocoDt, iouType="bbox")
 cocoEval.evaluate()
@@ -48,4 +48,4 @@ for cid, cname in zip(cat_ids, cat_names):
     print(f"mAP@0.5:       {cocoEval.stats[1]:.4f}")
     print(f"mAP@0.75:      {cocoEval.stats[2]:.4f}")
     print("-" * 40)
-print("\n所有类别评估完毕结果已保存至：", save_path)
+#print("\n所有类别评估完毕结果已保存至：", save_path)

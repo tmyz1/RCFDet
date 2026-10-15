@@ -1,0 +1,6 @@
+# 自动处理文本文件的换行符
+* text=auto
+
+# 强制某些文件保持 LF (适合 Linux 脚本)
+*.sh text eol=lf
+*.py text eol=lf

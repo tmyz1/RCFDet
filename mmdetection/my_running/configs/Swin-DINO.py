@@ -8,8 +8,10 @@ randomness = dict(
 )
 #需要应用的自定义类
 #数据集根目录
-#data_root = r'/root/autodl-tmp/M3FD/cocodataset'
-data_root = r"E:\my_data\M3FD\cocodataset"
+data_root = r'/root/autodl-tmp/M3FD_ffusion'
+#data_root = r"D:\data\M3FD\cocodataset"
+enhanced_ir_prefix = 'bench_w4/infrared'
+enhanced_weights_file = f'{data_root}/bench_w4/weights.txt'
 dataset_type = 'M3FDDataset'
 default_hooks = dict(
     checkpoint=dict(
@@ -30,8 +32,9 @@ env_cfg = dict(
     dist_cfg=dict(backend='nccl'),
     mp_cfg=dict(mp_start_method='fork', opencv_num_threads=0))
 launcher = 'none'
-#load_from = r'/root/autodl-tmp/Swin-Deformable/mmdetection/weight/dino.pth'
-load_from = r"E:\reproduce\weights\DINO\dino.pth"
+#load_from = r'/root/autodl-tmp/weight/dino.pth'
+#load_from = r'/root/autodl-tmp/Swin-Deformable-output/train/epoch_42.pth'
+load_from = r'/root/autodl-tmp/weight/dino.pth'
 log_level = 'INFO'
 log_processor = dict(by_epoch=True, type='LogProcessor', window_size=50)
 #整体模型
@@ -67,16 +70,16 @@ model = dict(
         qkv_bias=True,
         drop_path_rate=0.2,
         out_indices=(0, 1, 2, 3),
-        #pretrained=r'/root/autodl-tmp/Swin-Deformable/mmdetection/weight/swin_big_224.pth',
-        pretrained=r"E:\reproduce\weights\SwinTransformer\swin_big_224.pth"
+        pretrained=r'/root/autodl-tmp/weight/swin_tiny_224.pth',
+        #pretrained=r"D:\pycharm work\weight\swin_tiny_224.pth"
     ),
     #Swin-Transformer转DINO对齐模块
     neck=dict(
         in_channels=[
-            96,
-            192,
-            384,
-            768
+            256,
+            256,
+            256,
+            256
         ],
         kernel_size=1,
         out_channels=256,
@@ -182,11 +185,11 @@ test_dataloader = dict(
     dataset=dict(
         ann_file=r'annotations/test.json',
         backend_args=None,
-        data_prefix=dict(img='images/infrared'),
+        data_prefix=dict(img=enhanced_ir_prefix),
         #data_root=r'/root/autodl-tmp/M3FD/cocodataset',
-        data_root =r"E:\my_data\M3FD\cocodataset",
+        data_root=data_root,
         pipeline=[
-            dict(type='LoadRGBTImageFromFile'),
+            dict(type='LoadRGBTImageFromFile', weights_file=enhanced_weights_file),
             dict(type='LoadAnnotations', with_bbox=True),
             dict(type='ResizeRGBT', scale=(384,384), keep_ratio=False),
             dict(type='PackDetRGBTInputs')
@@ -194,22 +197,22 @@ test_dataloader = dict(
         test_mode=True,
         type='M3FDDataset'),
     drop_last=False,
-    num_workers=2,
+    num_workers=8,
     collate_fn=collate_rgbt,
     persistent_workers=True,
     sampler=dict(shuffle=False, type='DefaultSampler'))
 test_evaluator = dict(
-    #ann_file=r'/root/autodl-tmp/M3FD/cocodataset/annotations/test.json',
-    ann_file = r"E:\my_data\M3FD\cocodataset\annotations\test.json",
+    ann_file=f'{data_root}/annotations/test.json',
+    #ann_file = r"D:\data\M3FD\cocodataset\annotations\test.json",
     backend_args=None,
     format_only=False,# 仅保存结果，不计算指标（若需同时计算指标，设为False）
     metric='bbox',
     type='CocoMetric',
-    #outfile_prefix=r'/root/autodl-tmp/Swin-Deformable/mmdetection/out_put/3.24/test',
-    outfile_prefix = r"E:\pycharm\project\work_dirs\model\4/19",
+    outfile_prefix=r'/root/autodl-tmp/Swin-Deformable-output/test',
+    #outfile_prefix = r"D:\pycharm work\Swin-Deformable output",
 )
 test_pipeline = [
-    dict(type='LoadRGBTImageFromFile'),
+    dict(type='LoadRGBTImageFromFile', weights_file=enhanced_weights_file),
     dict(type='LoadAnnotations', with_bbox=True),
     dict(type='ResizeRGBT', scale=(384,384), keep_ratio=False),
     dict(type='PackDetRGBTInputs')
@@ -219,18 +222,16 @@ train_dataloader = dict(
     batch_size=4,
     dataset=dict(
         type=dataset_type,
-        #data_root=r'/root/autodl-tmp/M3FD/cocodataset',
-        data_root =r"E:\my_data\M3FD\cocodataset",
+        data_root=data_root,
+        #data_root =r"D:\data\M3FD\cocodataset",
         ann_file=r'annotations/train.json',
-        data_prefix=dict(img='images/infrared'),
+        data_prefix=dict(img=enhanced_ir_prefix),
         pipeline=[
-            dict(type='LoadRGBTImageFromFile'),
+            dict(type='LoadRGBTImageFromFile', weights_file=enhanced_weights_file),
             dict(type='LoadAnnotations', with_bbox=True),
             dict(type='ResizeRGBT', scale=(384,384), keep_ratio=False),
             dict(type='RandomFlipRGBT', prob=0.5),#水平翻转
             dict(type='RandomVerticalFlipRGBT', prob=0.5),#垂直翻转
-            # dict(type='RandomBrightnessContrastRGBT',prob=0.3),#光照增强
-            # dict(type='RandomBlurRGBT',prob=0.3),#随机模糊
             dict(type='RandomCutoutRGBT',prob=0.3),#随机遮盖
             dict(type='PackDetRGBTInputs')
         ],
@@ -242,7 +243,7 @@ train_dataloader = dict(
     sampler=dict(shuffle=True, type='DefaultSampler')
 )
 train_pipeline = [
-    dict(type='LoadRGBTImageFromFile'),
+    dict(type='LoadRGBTImageFromFile', weights_file=enhanced_weights_file),
     dict(type='LoadAnnotations', with_bbox=True),
     dict(type='ResizeRGBT', scale=(384,384), keep_ratio=False),
     dict(type='RandomFlipRGBT', prob=0.5),
@@ -256,11 +257,11 @@ val_dataloader = dict(
     dataset=dict(
         ann_file=r'annotations/test.json',
         backend_args=None,
-        data_prefix=dict(img='images/infrared'),
-        #data_root=r'/root/autodl-tmp/M3FD/cocodataset',
-        data_root =r"E:\my_data\M3FD\cocodataset",
+        data_prefix=dict(img=enhanced_ir_prefix),
+        data_root=data_root,
+        #data_root =r"D:\data\M3FD\cocodataset",
         pipeline=[
-            dict(type='LoadRGBTImageFromFile'),
+            dict(type='LoadRGBTImageFromFile', weights_file=enhanced_weights_file),
             dict(type='LoadAnnotations', with_bbox=True),
             dict(type='ResizeRGBT', scale=(384,384), keep_ratio=False),
             dict(type='PackDetRGBTInputs')
@@ -274,8 +275,8 @@ val_dataloader = dict(
     sampler=dict(shuffle=False, type='DefaultSampler')
 )
 val_evaluator = dict(
-    #ann_file=r'/root/autodl-tmp/M3FD/cocodataset/annotations/test.json',
-    ann_file = r"E:\my_data\M3FD\cocodataset\annotations\test.json",
+    ann_file=f'{data_root}/annotations/test.json',
+    #ann_file = r"D:\data\M3FD\cocodataset\annotations\test.json",
     backend_args=None,
     format_only=False,
     metric='bbox',
@@ -289,5 +290,5 @@ visualizer = dict(
     vis_backends=[
         dict(type='LocalVisBackend'),
     ])
-#work_dir = r'/root/autodl-tmp/Swin-Deformable/mmdetection/out_put/4.17//train'
-work_dirs = r"E:\pycharm\project\work_dirs\model\3.24"
+work_dir = r'/root/autodl-tmp/Swin-Deformable-output/train'
+#work_dirs = "D:\pycharm work\Swin-Deformable output"

@@ -7,11 +7,9 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 import torch.nn as nn
-from mmcv.cnn import ConvModule
 from mmengine.model import BaseModule
 from mmdet.registry import MODELS
 from torch import Tensor
-from mmdet.models.necks import YOLOXPAFPN
 
 
 @MODELS.register_module()
@@ -23,6 +21,8 @@ class swin_deformable_neck(BaseModule):
                  reduction: int = 16):
         super(swin_deformable_neck, self).__init__()
         self.out_channels = out_channels
+        if any(channels != out_channels for channels in in_channels):
+            raise ValueError('backbone pyramid channels must match neck out_channels')
         self.reduction = reduction
         self.sigmoid = nn.Sigmoid()
         self.RGB_CBAM = nn.ModuleList()
@@ -33,44 +33,25 @@ class swin_deformable_neck(BaseModule):
             IR_CBAM_block = CBAM_BLOCK(planes=in_channel)
             self.RGB_CBAM.append(RGB_CBAM_block)
             self.IR_CBAM.append(IR_CBAM_block)
-        #特征金字塔
-        self.rgb_fpn = YOLOXPAFPN(
-            in_channels=in_channels,
-            out_channels=out_channels,
-            num_csp_blocks=len(in_channels),
-        )
-        self.ir_fpn = YOLOXPAFPN(
-            in_channels=in_channels,
-            out_channels=out_channels,
-            num_csp_blocks=len(in_channels),
-        )
-        self.align_blocks = nn.ModuleList([
-            ConvModule(
-                out_channels,
-                out_channels,
-                kernel_size=1,
-                norm_cfg=dict(type='GN', num_groups=32),
-                act_cfg=dict(type='ReLU')
-            )
-            for _ in range(len(in_channels))
-        ])
 
     def forward(self, inputs):
         rgb, ir, a = inputs
-        a = a.view(-1, 1, 1, 1)
+        a = a.to(device=rgb[0].device, dtype=rgb[0].dtype).view(-1)
+        if a.numel() != rgb[0].shape[0] or not torch.isfinite(a).all():
+            raise ValueError('a must contain one finite RGB weight per image')
+        if ((a < 0) | (a > 1)).any():
+            raise ValueError('RGB weights must lie in [0, 1]')
         #空间通道注意力
-        for i in range(len(rgb)):
-            rgb[i] = self.RGB_CBAM[i](rgb[i])
-            ir[i] = self.IR_CBAM[i](ir[i])
-        #特征金字塔
-        rgb = self.rgb_fpn(rgb)
-        ir = self.ir_fpn(ir)
+        rgb = [attention(feat) for attention, feat in zip(self.RGB_CBAM, rgb)]
+        ir = [attention(feat) for attention, feat in zip(self.IR_CBAM, ir)]
 
-        # 相加融合
+        #按每张图的 RGB 权重分配固定数量的通道
+        rgb_channels = torch.round(a * self.out_channels).long()
+        channel_ids = torch.arange(self.out_channels, device=a.device).view(1, -1, 1, 1)
+        rgb_slots = channel_ids < rgb_channels.view(-1, 1, 1, 1)
         fused = []
         for i in range(len(rgb)):
-            f = rgb[i] * a + ir[i] * (1 - a)
-            f = self.align_blocks[i](f)
+            f = torch.where(rgb_slots, rgb[i], ir[i])
             fused.append(f)
 
         return fused

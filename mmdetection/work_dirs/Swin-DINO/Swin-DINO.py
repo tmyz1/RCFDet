@@ -1,6 +1,6 @@
 auto_scale_lr = dict(base_batch_size=4, enable=True)
 backend_args = None
-data_root = 'E:\\my_data\\M3FD\\cocodataset'
+data_root = 'D:\\data\\M3FD\\cocodataset'
 dataset_type = 'M3FDDataset'
 default_hooks = dict(
     checkpoint=dict(
@@ -20,7 +20,7 @@ env_cfg = dict(
     dist_cfg=dict(backend='nccl'),
     mp_cfg=dict(mp_start_method='fork', opencv_num_threads=0))
 launcher = 'none'
-load_from = 'E:\\reproduce\\weights\\RCFDet\\epoch_58.pth'
+load_from = 'D:\\pycharm work\\weight\\dino.pth'
 log_level = 'INFO'
 log_processor = dict(by_epoch=True, type='LogProcessor', window_size=50)
 max_epochs = 150
@@ -49,7 +49,7 @@ model = dict(
             2,
             3,
         ),
-        pretrained='E:\\reproduce\\weights\\SwinTransformer\\swin_big_224.pth',
+        pretrained='D:\\pycharm work\\weight\\swin_tiny_224.pth',
         qkv_bias=True,
         type='SwinNet',
         window_size=7),
@@ -100,10 +100,10 @@ model = dict(
         num_layers=6),
     neck=dict(
         in_channels=[
-            96,
-            192,
-            384,
-            768,
+            256,
+            256,
+            256,
+            256,
         ],
         kernel_size=1,
         out_channels=256,
@@ -160,7 +160,7 @@ test_dataloader = dict(
         ann_file='annotations/test.json',
         backend_args=None,
         data_prefix=dict(img='images/infrared'),
-        data_root='E:\\my_data\\M3FD\\cocodataset',
+        data_root='D:\\data\\M3FD\\cocodataset',
         pipeline=[
             dict(type='LoadRGBTImageFromFile'),
             dict(type='LoadAnnotations', with_bbox=True),
@@ -177,11 +177,11 @@ test_dataloader = dict(
     persistent_workers=True,
     sampler=dict(shuffle=False, type='DefaultSampler'))
 test_evaluator = dict(
-    ann_file='E:\\my_data\\M3FD\\cocodataset\\annotations\\test.json',
+    ann_file='D:\\data\\M3FD\\cocodataset\\annotations\\test.json',
     backend_args=None,
     format_only=False,
     metric='bbox',
-    outfile_prefix='E:\\pycharm\\project\\work_dirs\\model\\4/19',
+    outfile_prefix='D:\\pycharm work\\Swin-Deformable output',
     type='CocoMetric')
 test_pipeline = [
     dict(type='LoadRGBTImageFromFile'),
@@ -199,7 +199,7 @@ train_dataloader = dict(
     dataset=dict(
         ann_file='annotations/train.json',
         data_prefix=dict(img='images/infrared'),
-        data_root='E:\\my_data\\M3FD\\cocodataset',
+        data_root='D:\\data\\M3FD\\cocodataset',
         pipeline=[
             dict(type='LoadRGBTImageFromFile'),
             dict(type='LoadAnnotations', with_bbox=True),
@@ -237,7 +237,7 @@ val_dataloader = dict(
         ann_file='annotations/test.json',
         backend_args=None,
         data_prefix=dict(img='images/infrared'),
-        data_root='E:\\my_data\\M3FD\\cocodataset',
+        data_root='D:\\data\\M3FD\\cocodataset',
         pipeline=[
             dict(type='LoadRGBTImageFromFile'),
             dict(type='LoadAnnotations', with_bbox=True),
@@ -254,7 +254,7 @@ val_dataloader = dict(
     persistent_workers=True,
     sampler=dict(shuffle=False, type='DefaultSampler'))
 val_evaluator = dict(
-    ann_file='E:\\my_data\\M3FD\\cocodataset\\annotations\\test.json',
+    ann_file='D:\\data\\M3FD\\cocodataset\\annotations\\test.json',
     backend_args=None,
     format_only=False,
     metric='bbox',
@@ -269,4 +269,4 @@ visualizer = dict(
         dict(type='LocalVisBackend'),
     ])
 work_dir = './work_dirs\\Swin-DINO'
-work_dirs = 'E:\\pycharm\\project\\work_dirs\\model\\3.24'
+work_dirs = 'D:\\pycharm work\\Swin-Deformable output'

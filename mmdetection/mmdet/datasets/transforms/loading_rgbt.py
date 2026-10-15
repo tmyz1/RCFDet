@@ -1,3 +1,7 @@
+import csv
+import math
+from pathlib import Path
+
 import cv2
 import torch
 from mmcv import BaseTransform, to_tensor
@@ -12,139 +16,78 @@ from mmdet.structures.bbox import HorizontalBoxes
 
 @TRANSFORMS.register_module()
 class LoadRGBTImageFromFile(BaseTransform):
-    """Load IR + RGB + Edge images from file."""
-    def __init__(self, to_float32=True, color_type='color', imdecode_backend='cv2'):
-        super(LoadRGBTImageFromFile, self).__init__()
+    """Load pre-enhanced RGB/IR images and the image-level RGB weight."""
+
+    def __init__(
+        self,
+        weights_file,
+        to_float32=True,
+        color_type='color',
+        imdecode_backend='cv2',
+    ):
+        super().__init__()
+        self.weights_file = Path(weights_file)
         self.to_float32 = to_float32
         self.color_type = color_type
         self.imdecode_backend = imdecode_backend
+        self._rgb_weights = None
+
+    def _load_weights(self):
+        weights = {}
+        with self.weights_file.open('r', encoding='utf-8-sig', newline='') as file:
+            reader = csv.DictReader(file, delimiter='\t')
+            required = {'image', 'rgb_weight', 'ir_weight'}
+            if not reader.fieldnames or not required.issubset(reader.fieldnames):
+                raise ValueError(f'Invalid weight columns in {self.weights_file}')
+            for row in reader:
+                name = row['image'].replace('\\', '/')
+                if not name or name in weights:
+                    raise ValueError(f'Missing or duplicate image name in {self.weights_file}: {name}')
+                rgb_weight = float(row['rgb_weight'])
+                ir_weight = float(row['ir_weight'])
+                if (not math.isfinite(rgb_weight) or not math.isfinite(ir_weight)
+                        or not 0.0 <= rgb_weight <= 1.0
+                        or not 0.0 <= ir_weight <= 1.0
+                        or abs(rgb_weight + ir_weight - 1.0) > 1e-5):
+                    raise ValueError(f'Invalid modality weights for {name}')
+                weights[name] = rgb_weight
+        if not weights:
+            raise ValueError(f'No image weights found in {self.weights_file}')
+        self._rgb_weights = weights
 
     def transform(self, results: dict):
-        ir_path = results['img_path']
-        rgb_path = results.get('rgb_img_path', ir_path.replace('infrared', 'visible'))
+        if self._rgb_weights is None:
+            self._load_weights()
+        image_root = self.weights_file.parent.resolve()
+        ir_path = Path(results['img_path']).resolve()
+        try:
+            name = ir_path.relative_to(image_root / 'infrared').as_posix()
+        except ValueError as exc:
+            raise ValueError(
+                f'IR image must be under {image_root / "infrared"}: {ir_path}'
+            ) from exc
+        if name not in self._rgb_weights:
+            raise KeyError(f'No RGB weight for {name} in {self.weights_file}')
+        rgb_path = image_root / 'visible' / name
 
-        ir = imread(ir_path, flag=self.color_type, backend=self.imdecode_backend)
-        rgb = imread(rgb_path, flag=self.color_type, backend=self.imdecode_backend)
-
+        ir = imread(str(ir_path), flag=self.color_type, backend=self.imdecode_backend)
+        rgb = imread(str(rgb_path), flag=self.color_type, backend=self.imdecode_backend)
         if ir is None or rgb is None:
             raise FileNotFoundError(f'Failed to read image {ir_path} or {rgb_path}')
-
+        if ir.shape[:2] != rgb.shape[:2]:
+            ir = cv2.resize(ir, (rgb.shape[1], rgb.shape[0]), interpolation=cv2.INTER_LINEAR)
         if self.to_float32:
             ir = ir.astype(np.float32)
             rgb = rgb.astype(np.float32)
-        rgb_gray = cv2.cvtColor(rgb, cv2.COLOR_BGR2GRAY)
-        ir_gray = cv2.cvtColor(ir, cv2.COLOR_BGR2GRAY)
-        rgb_fft = self.fft_H(rgb_gray)
-        ir_fft = self.fft_H(ir_gray)
-        #分区域相加
-        block=10
-        edge,count = self.region_select_fft(rgb_fft, ir_fft, block)
-        a = self.get_score(rgb_fft, count, block)
-        edge3 = cv2.cvtColor(edge, cv2.COLOR_GRAY2BGR)
-        rgb = rgb.astype(np.float32)
-        ir = ir.astype(np.float32)
-        edge3= edge3.astype(np.float32)
-        # rgb = cv2.add(rgb, edge3)
-        # ir = cv2.add(ir, edge3)
+
         results['img'] = ir
         results['rgb_img'] = rgb
-        results['edge_img'] = edge
-        results['a'] = a
+        results.pop('edge_img', None)
+        results['rgb_img_path'] = str(rgb_path)
+        results['a'] = self._rgb_weights[name]
         results['img_shape'] = ir.shape[:2]
         results['ori_shape'] = ir.shape[:2]
         return results
-
-    def fft_H(self,img, sigma=10):
-        """
-        使用 Gaussian 高通滤波的 FFT 高频增强
-        sigma 越大，高频越强
-        """
-        # 转 float32
-        image_float32 = np.float32(img) / 255.0
-
-        # 傅里叶变换
-        dft = cv2.dft(image_float32, flags=cv2.DFT_COMPLEX_OUTPUT)
-        dft_shift = np.fft.fftshift(dft)
-
-        # 构造 Gaussian High-Pass mask
-        rows, cols = img.shape
-        crow, ccol = rows // 2, cols // 2
-
-        # 计算距离矩阵 D(u,v)
-        u = np.arange(rows)
-        v = np.arange(cols)
-        V, U = np.meshgrid(v, u)
-        D2 = (U - crow) ** 2 + (V - ccol) ** 2
-
-        # Gaussian High-pass filter
-        H = 1 - np.exp(-D2 / (2 * (sigma ** 2)))
-        H = np.repeat(H[:, :, np.newaxis], 2, axis=2)  # 扩展到两个通道（实部/虚部）
-
-        # 应用高通滤波器
-        fshift = dft_shift * H
-
-        # 反变换
-        f_ishift = np.fft.ifftshift(fshift)
-        img_back = cv2.idft(f_ishift)
-        img_back = cv2.magnitude(img_back[:, :, 0], img_back[:, :, 1])
-
-        # 归一化
-        img_back_norm = cv2.normalize(img_back, None, 0, 255, cv2.NORM_MINMAX)
-
-        return img_back_norm.astype(np.uint8)
-
-    def region_select_fft(self,rgb_fft, ir_fft, block=10):
-        """
-
-        Args:
-            rgb_fft: 高斯高通滤波之后的RGB图像
-            ir_fft: 高斯高通滤波之后的IR图像
-            block: 每一个区域的大小
-
-        Returns:新生成的边缘图像
-
-        """
-        h, w = rgb_fft.shape
-        add = np.zeros_like(rgb_fft, dtype=np.uint8)
-        cnt1=0
-        cnt2=0
-
-        for y in range(0, h, block):
-            for x in range(0, w, block):
-
-                y2 = min(y + block, h)
-                x2 = min(x + block, w)
-
-                # 当前10x10区域
-                region_1 = rgb_fft[y:y2, x:x2]
-                region_2 = ir_fft[y:y2, x:x2]
-                mean_1 = np.mean(region_1)
-                mean_2 = np.mean(region_2)
-
-                if mean_1 > mean_2:
-                    # 使用 RGB 高频
-                    add[y:y2, x:x2] = rgb_fft[y:y2, x:x2]
-                    cnt1+=1
-                else:
-                    # 使用 IR 高频
-                    add[y:y2, x:x2] = ir_fft[y:y2, x:x2]
-                    cnt2+=1
-
-        return add,cnt1-cnt2
-
-    def get_score(self,img, number, block):
-        H, W = img.shape
-        sum = (H // block) * (W // block)
-        num = abs(number)
-        if number > 0:
-            end = (num + sum) / (sum * 2)
-        else:
-            end = num / (sum * 2)
-        if end < 0.2:
-            end = 0
-        if end >0.8:
-            end = 1
-        return end
 
 
 @TRANSFORMS.register_module()
@@ -162,7 +105,7 @@ class ResizeRGBT(BaseTransform):
         h_scale = new_h / ori_h
 
         # resize 所有模态
-        for key in ['img', 'rgb_img', 'edge_img']:
+        for key in ['img', 'rgb_img', 'edge_img', 'fusion_img', 'fusion_alpha']:
             if key in results:
                 #results[key] = mmcv.imresize(results[key], (new_w, new_h))
                 results[key] = cv2.resize(results[key], (new_w, new_h), interpolation=cv2.INTER_LANCZOS4)
@@ -201,7 +144,7 @@ class RandomFlipRGBT(BaseTransform):
 
     def transform(self, results):
         if np.random.rand() < self.prob:
-            for key in ['img', 'rgb_img', 'edge_img']:
+            for key in ['img', 'rgb_img', 'edge_img', 'fusion_img', 'fusion_alpha']:
                 if key in results:
                     results[key] = mmcv.imflip(results[key], direction=self.direction)
 
@@ -231,7 +174,7 @@ class RandomVerticalFlipRGBT(BaseTransform):
     def transform(self, results):
         if np.random.rand() < self.prob:
             # 翻转图像
-            for key in ['img', 'rgb_img', 'edge_img']:
+            for key in ['img', 'rgb_img', 'edge_img', 'fusion_img', 'fusion_alpha']:
                 if key in results:
                     results[key] = mmcv.imflip(results[key], direction=self.direction)
 
@@ -264,7 +207,7 @@ class RandomBlurRGBT(BaseTransform):
 
     def transform(self, results):
         if np.random.rand() < self.prob:
-            for key in ['img', 'rgb_img', 'edge_img']:
+            for key in ['img', 'rgb_img', 'edge_img', 'fusion_img']:
                 if key in results:
                     results[key] = cv2.GaussianBlur(results[key], (self.ksize, self.ksize), 0)
         return results
@@ -290,7 +233,7 @@ class RandomCutoutRGBT(BaseTransform):
             x1 = np.random.randint(0, w - cut_w)
             y1 = np.random.randint(0, h - cut_h)
 
-            for key in ['img', 'rgb_img', 'ir_img', 'edge_img']:
+            for key in ['img', 'rgb_img', 'ir_img', 'edge_img', 'fusion_img', 'fusion_alpha']:
                 if key in results:
                     img = results[key]
                     img[y1:y1+cut_h, x1:x1+cut_w] = 0
@@ -316,7 +259,7 @@ class RandomBrightnessContrastRGBT(BaseTransform):
             # 对比度 (缩放)
             c = 1 + np.random.uniform(-self.contrast_range, self.contrast_range)
 
-            for key in ['img', 'rgb_img', 'ir_img', 'edge_img']:
+            for key in ['img', 'rgb_img', 'ir_img', 'edge_img', 'fusion_img']:
                 if key in results:
                     img = results[key].astype(np.float32)
                     img = img * c + b

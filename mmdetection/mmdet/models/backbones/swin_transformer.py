@@ -494,10 +494,12 @@ class swintransformer(nn.Module):
                  patch_norm=True,
                  out_indices=(0, 1, 2, 3),
                  frozen_stages=-1,
-                 use_checkpoint=False):
+                 use_checkpoint=False,
+                 pretrained=None):
         super().__init__()
 
         self.pretrain_img_size = pretrain_img_size
+        self.pretrained = pretrained
         self.num_layers = len(depths)
         self.embed_dim = embed_dim
         self.ape = ape
@@ -573,6 +575,8 @@ class swintransformer(nn.Module):
 
     def init_weights(self, pretrained=None):
         """Initialize the weights in backbone."""
+        if pretrained is None:
+            pretrained = self.pretrained
 
         def _init_weights(m):
             if isinstance(m, nn.Linear):
